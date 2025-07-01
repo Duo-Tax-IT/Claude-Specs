@@ -1,0 +1,27 @@
+{
+  "name": "ai-performance-monitor",
+  "version": "3.0.0",
+  "description": "Enhanced AI Performance Monitor with 20-question benchmark test",
+  "main": "ai-monitor.js",
+  "scripts": {
+    "start": "node ai-monitor.js",
+    "benchmark": "node ai-monitor.js",
+    "test": "node ai-monitor.js",
+    "help": "node ai-monitor.js --help",
+    "python": "python run_benchmark.py"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "csv-parser": "^3.0.0",
+    "csv-writer": "^1.6.0",
+    "fs-extra": "^11.1.1",
+    "readline-sync": "^1.4.10"
+  },
+  "devDependencies": {},
+  "keywords": ["ai", "performance", "monitoring", "benchmark", "testing"],
+  "author": "AI Performance Monitor",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+} 
