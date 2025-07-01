@@ -4,12 +4,19 @@ const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const csv = require('csv-parser');
 const chalk = require('chalk');
 const Logger = require('./logger');
+const Anthropic = require('@anthropic-ai/sdk');
+require('dotenv').config();
 
 class AIPerformanceMonitor {
     constructor() {
         this.logger = new Logger('AI-Monitor');
         this.benchmarkResultsPath = path.join(__dirname, 'benchmark_results.csv');
         this.benchmarkQuestions = this.initializeBenchmarkQuestions();
+        
+        // Initialize Anthropic client for real AI calls
+        this.anthropic = new Anthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY
+        });
         
         this.csvWriter = createCsvWriter({
             path: this.benchmarkResultsPath,
@@ -237,18 +244,13 @@ class AIPerformanceMonitor {
             
             console.log(chalk.cyan(`\n[${i+1}/20] ${question.category.replace('_', ' ')} Category`));
             console.log(chalk.yellow('Question:'), question.question);
-            console.log(chalk.gray('\nThinking...'));
+            console.log(chalk.gray('\n🤖 Sending to Claude API...'));
             
-            // Simulate AI processing time (1-5 seconds)
-            const processingTime = Math.random() * 4000 + 1000;
-            await this.logger.debug(`⏱️ Simulating AI processing time: ${processingTime.toFixed(0)}ms`);
-            await this.sleep(processingTime);
+            // Make real API call to Claude
+            const aiResponse = await this.generateRealAIResponse(question);
             
             const endTime = Date.now();
             const responseTime = endTime - startTime;
-            
-            // Generate AI response (simulated - in real implementation, this would be actual AI response)
-            const aiResponse = this.generateSimulatedResponse(question);
             await this.logger.process('🤖 Generated AI response', {
                 questionId: question.id,
                 responseLength: aiResponse.length,
@@ -372,31 +374,37 @@ class AIPerformanceMonitor {
         return { finalPercentage, totalScore, results, categoryScores };
     }
 
-    generateSimulatedResponse(question) {
-        // This simulates an AI response - in real implementation, this would be actual AI
-        const responses = {
-            'sql_join_complex': "SELECT c.id, c.name, COUNT(o.id) as order_count, SUM(o.total_amount) as total_value FROM customers c JOIN orders o ON c.id = o.customer_id WHERE o.order_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) GROUP BY c.id, c.name HAVING COUNT(o.id) > 3;",
-            'sql_window_function': "WITH RankedEmployees AS (SELECT id, name, department_id, salary, RANK() OVER (PARTITION BY department_id ORDER BY salary DESC) as salary_rank FROM employees) SELECT * FROM RankedEmployees WHERE salary_rank <= 2;",
-            'sql_subquery_optimization': "SELECT p.* FROM products p INNER JOIN categories c ON p.category_id = c.id WHERE c.name IN ('Electronics', 'Computers'); -- JOIN is more efficient than subquery",
-            'sql_pivot_data': "SELECT product_category, SUM(CASE WHEN month = 'Jan' THEN amount ELSE 0 END) as January, SUM(CASE WHEN month = 'Feb' THEN amount ELSE 0 END) as February, SUM(CASE WHEN month = 'Mar' THEN amount ELSE 0 END) as March FROM sales GROUP BY product_category;",
-            'bug_memory_leak': "The issue is with variable hoisting and closure. The var i is hoisted and shared across all functions. When the handlers execute, i will be equal to items.length. Fix: use let instead of var, or create proper closure.",
-            'bug_race_condition': "Race condition occurs when multiple async calls read the same value simultaneously. Use atomic operations or database-level incrementing like UPDATE counter SET count = count + 1.",
-            'bug_null_pointer': "NullPointerException risk if getName() returns null. Need null check: if (user.getName() != null) { String name = user.getName().trim(); ... }",
-            'bug_buffer_overflow': "Buffer overflow vulnerability with gets(). Use fgets(buffer, sizeof(buffer), stdin) to prevent buffer overrun attacks.",
-            'code_binary_search': "mid = Math.floor((left + right) / 2); left = mid + 1; right = mid - 1;",
-            'code_promise_chain': "return fetchProfile(user.profileId); return processProfile(profile); console.error('Chain error:', error);",
-            'code_recursive_factorial': "if (n <= 1) return 1; if (memo[n]) return memo[n]; return memo[n] = n * factorial(n - 1);",
-            'code_regex_validation': "const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/; return emailRegex.test(email);",
-            'algo_two_sum': "Use hash map for O(n): const map = new Map(); for (let i = 0; i < nums.length; i++) { const complement = target - nums[i]; if (map.has(complement)) return [map.get(complement), i]; map.set(nums[i], i); }",
-            'algo_palindrome_check': "Use two pointers: find middle with slow/fast pointers, reverse second half, compare halves, then restore original structure for O(1) space complexity.",
-            'algo_merge_intervals': "Sort by start time, then merge overlapping intervals: [[1,3],[2,6]] becomes [1,6]. Result: [[1,6],[8,10],[15,18]]",
-            'algo_lru_cache': "HashMap + Doubly Linked List: HashMap for O(1) access, DLL for O(1) insertion/deletion. Move accessed items to head, remove from tail when at capacity.",
-            'api_rest_design': "GET /posts, POST /posts, GET /posts/:id, PUT /posts/:id, DELETE /posts/:id, GET /posts/:id/comments, POST /posts/:id/comments with appropriate status codes 200, 201, 404, 204",
-            'api_error_handling': "Rate limiting: Token bucket algorithm. Retries: Exponential backoff with jitter. Circuit breaker: Monitor failure rates, open after threshold, half-open for recovery testing.",
-            'api_authentication': "JWT for stateless microservices auth, OAuth 2.0 for third-party user delegation, API Keys for simple service-to-service authentication. Each serves different security models.",
-            'api_graphql_optimization': "Use DataLoader pattern to batch requests: const userLoader = new DataLoader(ids => User.findByIds(ids)); In resolver: return userLoader.load(userId); This prevents N+1 queries."
-        };
-        return responses[question.id] || "This is a simulated AI response that demonstrates understanding of the key concepts and provides a technically accurate solution.";
+    async generateRealAIResponse(question) {
+        try {
+            await this.logger.debug(`🤖 Sending question to Claude: ${question.id}`);
+            
+            const response = await this.anthropic.messages.create({
+                model: "claude-3-sonnet-20240229",
+                max_tokens: 1000,
+                messages: [{
+                    role: "user",
+                    content: `You are a technical expert being tested on programming knowledge. Please provide a concise, accurate answer to this question:
+
+${question.question}
+
+Provide a direct, technical response without unnecessary explanation. Focus on the core solution or answer.`
+                }]
+            });
+
+            const aiResponse = response.content[0].text;
+            await this.logger.debug(`✅ Received Claude response: ${aiResponse.length} characters`);
+            return aiResponse;
+            
+        } catch (error) {
+            await this.logger.error('Failed to get AI response', { 
+                error: error.message, 
+                questionId: question.id,
+                stack: error.stack 
+            });
+            
+            // Return error indicator instead of crashing
+            return `[API Error: ${error.message}]`;
+        }
     }
 
     evaluateResponse(aiResponse, correctAnswer, responseTime) {

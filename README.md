@@ -30,7 +30,15 @@ node daily-runner.js
 npm install
 ```
 
-### 2. Run Your First Daily Check
+### 2. Configure API Key
+1. Get your Anthropic API key from [https://console.anthropic.com/](https://console.anthropic.com/)
+2. Create a `.env` file in the project root:
+   ```bash
+   ANTHROPIC_API_KEY=your_actual_api_key_here
+   ```
+   (See `env-example.txt` for reference)
+
+### 3. Run Your First Daily Check
 ```bash
 # Windows users (recommended):
 run-daily-performance.bat
@@ -39,7 +47,7 @@ run-daily-performance.bat
 node daily-runner.js
 ```
 
-### 3. View Results
+### 4. View Results
 - **Simple Log**: `daily-results.log` (tab-separated: Date, Score%, Time, Clock)
 - **HTML Dashboard**: `Reports/dashboard-YYYY-MM-DD.html` 
 - **Trend Analysis**: `Reports/trends-YYYY-MM-DD.json`
