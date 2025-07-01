@@ -200,7 +200,7 @@ Each test run automatically clears:
 ```javascript
 // Modules cleared before each run:
 - ./ai-monitor.js (AI Benchmark Test)
-- ./auto-test.js (Cognitive Test)
+# Cognitive test functionality integrated into main benchmark
 - All their dependencies
 ```
 

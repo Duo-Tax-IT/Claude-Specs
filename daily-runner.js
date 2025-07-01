@@ -3,7 +3,6 @@ const path = require('path');
 const Logger = require('./logger');
 const chalk = require('chalk');
 const AIPerformanceMonitor = require('./ai-monitor');
-const AutomatedAITester = require('./auto-test');
 
 class DailyPerformanceRunner {
     constructor() {
@@ -34,24 +33,16 @@ class DailyPerformanceRunner {
             const aiMonitor = new FreshAIMonitor();
             const benchmarkResults = await aiMonitor.runBenchmarkTest();
             
-            console.log(chalk.cyan('\n🧠 Running Cognitive Test...'));
-            const FreshAITester = require('./auto-test');
-            const cognitiveTest = new FreshAITester();
-            const cognitiveResults = await cognitiveTest.runAutomatedTest();
-            
-            // Calculate combined score (70% benchmark, 30% cognitive)
-            const benchmarkScore = benchmarkResults.finalPercentage;
-            const cognitiveScore = cognitiveResults.finalPercentage;
-            const overallScore = (benchmarkScore * 0.7) + (cognitiveScore * 0.3);
+            // Use benchmark score as overall score
+            const overallScore = benchmarkResults.finalPercentage;
             
             const totalTime = Math.round((Date.now() - startTime) / 1000);
             
-            await this.logger.success(`🎯 Combined AI Performance: ${overallScore.toFixed(1)}%`);
-            await this.logger.info('Test Breakdown', {
-                benchmarkScore: benchmarkScore.toFixed(1) + '%',
-                cognitiveScore: cognitiveScore.toFixed(1) + '%',
-                weighting: '70% benchmark + 30% cognitive',
-                totalQuestions: benchmarkResults.results.length + (cognitiveResults.results?.length || 10)
+            await this.logger.success(`🎯 AI Performance: ${overallScore.toFixed(1)}%`);
+            await this.logger.info('Test Results', {
+                benchmarkScore: overallScore.toFixed(1) + '%',
+                totalQuestions: benchmarkResults.results.length,
+                testType: 'Professional Benchmark (20 Questions)'
             });
             
             // Simple results log: Date [TAB] Result% [TAB] Time [TAB] Clock Time
@@ -257,8 +248,7 @@ Generated: ${new Date().toLocaleString()}`;
     async clearModuleCache() {
         // Clear Node.js require cache for test modules to ensure completely fresh runs
         const modulesToClear = [
-            './ai-monitor',
-            './auto-test'
+            './ai-monitor'
         ];
         
         console.log(chalk.gray('🧹 Clearing module cache for fresh test runs...'));
@@ -279,7 +269,6 @@ Generated: ${new Date().toLocaleString()}`;
         
         // Additional cache clearing to be thorough
         delete require.cache[require.resolve('./ai-monitor')];
-        delete require.cache[require.resolve('./auto-test')];
         
         // Note: Module classes will be re-required fresh when instantiated
         

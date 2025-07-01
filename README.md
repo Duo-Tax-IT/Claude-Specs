@@ -169,7 +169,7 @@ For development or debugging, individual components can be run:
 ```bash
 # Individual tests (for development)
 node ai-monitor.js          # Benchmark test only
-node auto-test.js          # Cognitive test only
+# Cognitive test functionality integrated into main benchmark
 
 # View existing trends
 node daily-runner.js       # Full daily automation

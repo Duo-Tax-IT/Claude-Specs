@@ -40,153 +40,153 @@ class AIPerformanceMonitor {
 
     initializeBenchmarkQuestions() {
         return [
-            // SQL Database Questions (4)
-            {
-                id: 'sql_join_complex',
-                category: 'SQL_Database',
-                question: "Write a SQL query to find all customers who have made more than 3 orders in the last 6 months, along with their total order value. Use tables: customers(id, name), orders(id, customer_id, order_date, total_amount).",
-                correctAnswer: "SELECT c.id, c.name, COUNT(o.id) as order_count, SUM(o.total_amount) as total_value FROM customers c JOIN orders o ON c.id = o.customer_id WHERE o.order_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH) GROUP BY c.id, c.name HAVING COUNT(o.id) > 3;",
-                points: 12
-            },
-            {
-                id: 'sql_window_function',
-                category: 'SQL_Database',
-                question: "Create a query to rank employees by salary within each department and show only the top 2 highest paid employees per department. Use table: employees(id, name, department_id, salary).",
-                correctAnswer: "SELECT id, name, department_id, salary, rank FROM (SELECT id, name, department_id, salary, RANK() OVER (PARTITION BY department_id ORDER BY salary DESC) as rank FROM employees) ranked WHERE rank <= 2;",
-                points: 12
-            },
-            {
-                id: 'sql_subquery_optimization',
-                category: 'SQL_Database',
-                question: "Optimize this query: SELECT * FROM products WHERE category_id IN (SELECT id FROM categories WHERE name = 'Electronics' OR name = 'Computers');",
-                correctAnswer: "SELECT p.* FROM products p JOIN categories c ON p.category_id = c.id WHERE c.name IN ('Electronics', 'Computers'); -- Using JOIN instead of subquery for better performance",
-                points: 12
-            },
-            {
-                id: 'sql_pivot_data',
-                category: 'SQL_Database',
-                question: "Write a query to pivot monthly sales data showing months as columns. Table: sales(month, product_category, amount). Show product categories as rows and months as columns with total amounts.",
-                correctAnswer: "SELECT product_category, SUM(CASE WHEN month = 'Jan' THEN amount ELSE 0 END) as Jan, SUM(CASE WHEN month = 'Feb' THEN amount ELSE 0 END) as Feb, SUM(CASE WHEN month = 'Mar' THEN amount ELSE 0 END) as Mar FROM sales GROUP BY product_category;",
-                points: 12
-            },
-
-            // Bug Identification Questions (4)
-            {
-                id: 'bug_memory_leak',
-                category: 'Bug_Identification',
-                question: "Find the bug in this JavaScript code: ```function createHandlers(items) { const handlers = []; for (var i = 0; i < items.length; i++) { handlers.push(function() { console.log('Item:', items[i]); }); } return handlers; }```",
-                correctAnswer: "The bug is closure variable capture. The variable 'i' is shared across all functions, so when called, all handlers will log 'Item: undefined' because i equals items.length. Fix: use 'let i' instead of 'var i' or create a closure: handlers.push((function(index) { return function() { console.log('Item:', items[index]); }; })(i));",
-                points: 12
-            },
-            {
-                id: 'bug_race_condition',
-                category: 'Bug_Identification',
-                question: "Identify the concurrency bug: ```async function updateCounter() { const current = await getCurrentCount(); const newCount = current + 1; await saveCount(newCount); }``` Multiple calls to updateCounter() run simultaneously.",
-                correctAnswer: "Race condition bug. Multiple simultaneous calls can read the same 'current' value before any saves it, causing lost updates. Fix: Use atomic operations, database transactions, or locking mechanisms. Example: UPDATE counter SET count = count + 1 WHERE id = ?; or use mutex/semaphore.",
-                points: 12
-            },
-            {
-                id: 'bug_null_pointer',
-                category: 'Bug_Identification',
-                question: "Find the potential bug: ```public String processUser(User user) { String name = user.getName().trim(); if (name.length() > 0) { return name.toUpperCase(); } return 'Anonymous'; }```",
-                correctAnswer: "Potential NullPointerException. If user.getName() returns null, calling .trim() will throw NPE. Fix: String name = user.getName(); if (name != null) { name = name.trim(); if (name.length() > 0) return name.toUpperCase(); } return 'Anonymous';",
-                points: 12
-            },
-            {
-                id: 'bug_buffer_overflow',
-                category: 'Bug_Identification',
-                question: "Identify the security vulnerability: ```char buffer[10]; printf('Enter name: '); gets(buffer); printf('Hello %s!', buffer);```",
-                correctAnswer: "Buffer overflow vulnerability. gets() doesn't check buffer bounds, allowing attackers to overwrite memory and potentially execute arbitrary code. Fix: Use fgets(buffer, sizeof(buffer), stdin) or scanf('%9s', buffer) to limit input size.",
-                points: 12
-            },
-
-            // Code Completion Questions (4)
-            {
-                id: 'code_binary_search',
-                category: 'Code_Completion',
-                question: "Complete this binary search function: ```function binarySearch(arr, target) { let left = 0, right = arr.length - 1; while (left <= right) { let mid = ___; if (arr[mid] === target) return mid; if (arr[mid] < target) ___; else ___; } return -1; }```",
-                correctAnswer: "let mid = Math.floor((left + right) / 2); if (arr[mid] < target) left = mid + 1; else right = mid - 1;",
-                points: 12
-            },
-            {
-                id: 'code_promise_chain',
-                category: 'Code_Completion',
-                question: "Complete the Promise chain: ```fetchUser(id).then(user => { return ___; }).then(profile => { return ___; }).catch(error => { ___; });``` The chain should fetch user, then fetch their profile, then handle errors.",
-                correctAnswer: "return fetchProfile(user.profileId); }).then(profile => { return processProfile(profile); }).catch(error => { console.error('Error in chain:', error); throw error;",
-                points: 12
-            },
-            {
-                id: 'code_recursive_factorial',
-                category: 'Code_Completion',
-                question: "Complete the recursive factorial function with memoization: ```const memo = {}; function factorial(n) { if (___) return 1; if (___) return memo[n]; return memo[n] = ___; }```",
-                correctAnswer: "if (n <= 1) return 1; if (memo[n]) return memo[n]; return memo[n] = n * factorial(n - 1);",
-                points: 12
-            },
-            {
-                id: 'code_regex_validation',
-                category: 'Code_Completion',
-                question: "Complete the email validation regex: ```const emailRegex = /^[___]+@[___]+\\.[___]+$/; function isValidEmail(email) { return ___; }```",
-                correctAnswer: "const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/; function isValidEmail(email) { return emailRegex.test(email); }",
-                points: 12
-            },
-
-            // Logic/Algorithm Questions (4)
+            // Logic & Algorithm Questions (Fundamental Reasoning)
             {
                 id: 'algo_two_sum',
                 category: 'Logic_Algorithm',
-                question: "Given an array of integers and a target sum, find two numbers that add up to the target. Return their indices. Optimize for O(n) time complexity.",
-                correctAnswer: "Use hash map: function twoSum(nums, target) { const map = new Map(); for (let i = 0; i < nums.length; i++) { const complement = target - nums[i]; if (map.has(complement)) return [map.get(complement), i]; map.set(nums[i], i); } return []; }",
+                question: "Given an array of integers and a target sum, return indices of the two numbers that add up exactly to the target. Optimize to O(n) time complexity.",
+                correctAnswer: "Use a hash map to store each number and its index: for each number, calculate complement (target - number), and check the map. Return indices immediately upon match. Complexity: O(n).",
                 points: 12
             },
             {
                 id: 'algo_palindrome_check',
                 category: 'Logic_Algorithm',
-                question: "Design an efficient algorithm to check if a linked list is a palindrome without using extra space proportional to input size.",
-                correctAnswer: "1) Find middle using slow/fast pointers 2) Reverse second half 3) Compare first half with reversed second half 4) Restore list. Code: Use two pointers, reverse in-place, compare, then restore original structure.",
+                question: "Design an efficient algorithm to verify if a singly linked list is a palindrome. Solve it with O(1) additional space.",
+                correctAnswer: "Find the midpoint using slow and fast pointers; reverse the second half in-place; compare the two halves node-by-node; finally restore the original list structure. Complexity: O(n) time, O(1) space.",
                 points: 12
             },
             {
                 id: 'algo_merge_intervals',
                 category: 'Logic_Algorithm',
-                question: "Given intervals [[1,3],[2,6],[8,10],[15,18]], merge overlapping intervals. What's the algorithm and result?",
-                correctAnswer: "1) Sort by start time 2) Iterate and merge overlapping intervals. Result: [[1,6],[8,10],[15,18]]. Algorithm: for each interval, if it overlaps with previous merged interval, extend the end time; otherwise add new interval.",
+                question: "Given intervals [[1,3],[2,6],[8,10],[15,18]], merge all overlapping intervals and return the merged result.",
+                correctAnswer: "Sort intervals by start times. Iterate through, merging intervals when overlap is detected. Result: [[1,6],[8,10],[15,18]].",
                 points: 12
             },
             {
                 id: 'algo_lru_cache',
                 category: 'Logic_Algorithm',
-                question: "Design an LRU (Least Recently Used) cache with O(1) get and put operations. What data structures would you use?",
-                correctAnswer: "Use HashMap + Doubly Linked List. HashMap stores key->node mapping for O(1) access. Doubly linked list maintains order (head=most recent, tail=least recent). On access: move to head. On capacity exceed: remove tail.",
+                question: "Design an LRU Cache supporting O(1) get and put operations. Which data structures ensure optimal complexity?",
+                correctAnswer: "Use a HashMap and Doubly Linked List. HashMap allows O(1) lookups; Doubly Linked List maintains usage order, enabling quick insertions/deletions.",
                 points: 12
             },
 
-            // API Integration Questions (4)
+            // Code Completion Questions (Implementation Skills)
+            {
+                id: 'code_binary_search',
+                category: 'Code_Completion',
+                question: "Complete this binary search: `function binarySearch(arr, target){ let left=0,right=arr.length-1; while(left<=right){ let mid=___; if(arr[mid]===target)return mid; if(arr[mid]<target)___; else ___;} return -1;}`",
+                correctAnswer: "`mid=Math.floor((left+right)/2); if(arr[mid]<target)left=mid+1; else right=mid-1;`",
+                points: 12
+            },
+            {
+                id: 'code_promise_chain',
+                category: 'Code_Completion',
+                question: "Complete the promise chain: `fetchUser(id).then(user=>___).then(profile=>___).catch(error=>___);`. Chain: fetch user, fetch user's profile, handle errors properly.",
+                correctAnswer: "`fetchProfile(user.profileId)).then(profile=>processProfile(profile)).catch(error=>{console.error(error);throw error;});`",
+                points: 12
+            },
+            {
+                id: 'code_recursive_factorial',
+                category: 'Code_Completion',
+                question: "Complete recursive factorial function using memoization: `const memo={}; function factorial(n){if(___)return 1;if(___)return memo[n]; return memo[n]=___;}`",
+                correctAnswer: "`n<=1; memo[n]; n*factorial(n-1);`",
+                points: 12
+            },
+            {
+                id: 'code_regex_validation',
+                category: 'Code_Completion',
+                question: "Complete the regex for email validation: `const emailRegex=/^[___]+@[___]+\\.[___]+$/; function isValidEmail(email){return ___;}`",
+                correctAnswer: "`[a-zA-Z0-9._%+-]+; [a-zA-Z0-9.-]+; [a-zA-Z]{2,}; emailRegex.test(email);`",
+                points: 12
+            },
+
+            // SQL Database Questions (Intermediate Complexity)
+            {
+                id: 'sql_join_complex',
+                category: 'SQL_Database',
+                question: "Write SQL to retrieve customer IDs, names, and their total order count and amount if they've placed over 3 orders in the last 6 months. Tables: `customers(id,name)`, `orders(id,customer_id,order_date,total_amount)`.",
+                correctAnswer: "SELECT c.id,c.name,COUNT(o.id)AS order_count,SUM(o.total_amount)AS total_value FROM customers c JOIN orders o ON c.id=o.customer_id WHERE o.order_date>=DATE_SUB(NOW(),INTERVAL 6 MONTH)GROUP BY c.id,c.name HAVING COUNT(o.id)>3;",
+                points: 12
+            },
+            {
+                id: 'sql_window_function',
+                category: 'SQL_Database',
+                question: "Rank employees by salary within departments, selecting only the two highest-paid per department. Table: `employees(id,name,department_id,salary)`.",
+                correctAnswer: "SELECT id,name,department_id,salary,rank FROM(SELECT id,name,department_id,salary,RANK()OVER(PARTITION BY department_id ORDER BY salary DESC)AS rank FROM employees)ranked WHERE rank<=2;",
+                points: 12
+            },
+            {
+                id: 'sql_subquery_optimization',
+                category: 'SQL_Database',
+                question: "Optimize the following query: `SELECT*FROM products WHERE category_id IN(SELECT id FROM categories WHERE name='Electronics'OR name='Computers');`",
+                correctAnswer: "SELECT p.*FROM products p JOIN categories c ON p.category_id=c.id WHERE c.name IN('Electronics','Computers');--Improved by JOIN instead of IN subquery",
+                points: 12
+            },
+            {
+                id: 'sql_pivot_data',
+                category: 'SQL_Database',
+                question: "Pivot monthly sales data, displaying months as columns and product categories as rows. Table: `sales(month,product_category,amount)`.",
+                correctAnswer: "SELECT product_category,SUM(CASE WHEN month='Jan'THEN amount ELSE 0 END)AS Jan,SUM(CASE WHEN month='Feb'THEN amount ELSE 0 END)AS Feb,SUM(CASE WHEN month='Mar'THEN amount ELSE 0 END)AS Mar FROM sales GROUP BY product_category;",
+                points: 12
+            },
+
+            // Bug Identification Questions (Advanced Debugging)
+            {
+                id: 'bug_memory_leak',
+                category: 'Bug_Identification',
+                question: "Identify bug in JavaScript closure: `function createHandlers(items){const handlers=[];for(var i=0;i<items.length;i++){handlers.push(function(){console.log(items[i]);});}return handlers;}`",
+                correctAnswer: "Closure capture bug: variable `i` shared across closures, causing all handlers to log undefined. Fix: Use `let i` or create an explicit closure.",
+                points: 12
+            },
+            {
+                id: 'bug_race_condition',
+                category: 'Bug_Identification',
+                question: "Identify concurrency issue: `async function updateCounter(){const current=await getCurrent();await save(current+1);}` Multiple simultaneous calls.",
+                correctAnswer: "Race condition: simultaneous reads can cause lost updates. Fix with atomic DB increments or mutex locks.",
+                points: 12
+            },
+            {
+                id: 'bug_null_pointer',
+                category: 'Bug_Identification',
+                question: "Find potential NullPointerException: `user.getName().trim();` in Java method.",
+                correctAnswer: "Potential NPE if `getName()` returns null. Fix: add null-check before calling `trim()`.",
+                points: 12
+            },
+            {
+                id: 'bug_buffer_overflow',
+                category: 'Bug_Identification',
+                question: "Identify security flaw: `char buffer[10];gets(buffer);`",
+                correctAnswer: "Buffer overflow: `gets()` doesn't limit input. Fix: Use `fgets(buffer,sizeof(buffer),stdin)` instead.",
+                points: 12
+            },
+
+            // API Integration Questions (Advanced Integration)
             {
                 id: 'api_rest_design',
                 category: 'API_Integration',
-                question: "Design RESTful API endpoints for a blog system with posts, comments, and users. Include proper HTTP methods and status codes.",
-                correctAnswer: "GET /posts (200), POST /posts (201), GET /posts/:id (200/404), PUT /posts/:id (200/404), DELETE /posts/:id (204/404), GET /posts/:id/comments (200), POST /posts/:id/comments (201), GET /users/:id (200/404), POST /users (201)",
+                question: "Define proper RESTful endpoints, methods, and status codes for posts/comments/users in a blogging API.",
+                correctAnswer: "Endpoints: `GET/POST/PUT/DELETE` with proper HTTP methods and status codes: `200,201,204,404` as appropriate.",
                 points: 12
             },
             {
                 id: 'api_error_handling',
                 category: 'API_Integration',
-                question: "How would you handle API rate limiting, retries, and circuit breaker pattern in a microservices architecture?",
-                correctAnswer: "Rate limiting: Token bucket algorithm, Redis counters. Retries: Exponential backoff with jitter. Circuit breaker: Monitor failure rates, open circuit after threshold, half-open for testing, close when healthy. Use libraries like Hystrix or Resilience4j.",
+                question: "Describe handling rate-limiting, retries, and circuit breakers in microservices.",
+                correctAnswer: "Use token buckets for rate limits, exponential backoff for retries, and circuit breaker patterns (e.g., Hystrix/Resilience4j).",
                 points: 12
             },
             {
                 id: 'api_authentication',
                 category: 'API_Integration',
-                question: "Compare JWT vs OAuth 2.0 vs API Keys for different API security scenarios. When would you use each?",
-                correctAnswer: "JWT: Stateless auth, microservices, short-lived tokens with refresh. OAuth 2.0: Third-party access, user consent, social login. API Keys: Simple service-to-service, internal APIs, rate limiting. JWT for distributed systems, OAuth for user delegation, API keys for service auth.",
+                question: "When to choose JWT, OAuth2.0, or API Keys?",
+                correctAnswer: "JWT: stateless, microservices. OAuth2.0: delegated access, external logins. API Keys: internal, basic auth.",
                 points: 12
             },
             {
                 id: 'api_graphql_optimization',
                 category: 'API_Integration',
-                question: "How do you solve the N+1 query problem in GraphQL? Provide a solution with data loaders.",
-                correctAnswer: "Use DataLoader pattern: Batch multiple requests in single tick, deduplicate keys, cache results. Example: const userLoader = new DataLoader(ids => User.findByIds(ids)); In resolver: return userLoader.load(userId); This batches database queries instead of making N separate calls.",
+                question: "Solve GraphQL N+1 problem using DataLoader.",
+                correctAnswer: "Batch & cache requests via DataLoader in resolvers to optimize query execution.",
                 points: 12
             }
         ];
