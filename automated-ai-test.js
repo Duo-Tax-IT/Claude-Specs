@@ -3,11 +3,19 @@ const path = require('path');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const chalk = require('chalk');
 const Logger = require('./logger');
+const Anthropic = require('@anthropic-ai/sdk');
+require('dotenv').config();
 
 class AutomatedAITester {
     constructor() {
         this.logger = new Logger('Automated-AI-Tester');
         this.testResultsPath = path.join(__dirname, 'automated_ai_test_results.csv');
+        
+        // Initialize Anthropic client for real AI calls
+        this.anthropic = new Anthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY
+        });
+        
         this.initializeResultsFile();
     }
 
@@ -52,53 +60,81 @@ class AutomatedAITester {
                 id: 'logic_puzzle',
                 category: 'Logic_Reasoning',
                 question: "In a 5-story building, Alice lives 2 floors above Bob, who lives 3 floors below Carol. Dan lives on floor 3. If Carol doesn't live on floor 5, what floor does Alice live on?",
-                correctAnswer: "This puzzle contains a logical contradiction and has no valid solution.",
-                myResponse: "Let me work through this systematically. If Carol is 3 floors above Bob, and Alice is 2 floors above Bob, then Carol is 1 floor above Alice. Testing possibilities: If Carol=4, then Bob=1, Alice=3 - but Dan is already on 3. If Carol=3, conflicts with Dan. If Carol=2, then Bob=-1 (impossible). This puzzle appears to have no valid solution due to logical contradictions."
+                correctAnswer: "This puzzle contains a logical contradiction and has no valid solution."
             },
             {
                 id: 'bayes_theorem',
                 category: 'Statistical_Reasoning',
                 question: "A medical test is 95% accurate. 1% of population has the disease. If you test positive, what's the probability you actually have the disease?",
-                correctAnswer: "16.1%. Using Bayes' theorem: P(Disease|Positive) ≈ 0.161 = 16.1%",
-                myResponse: "This is a classic base rate fallacy example. Using Bayes' theorem: P(Disease|Positive) = (0.95 × 0.01) / [(0.95 × 0.01) + (0.05 × 0.99)] = 0.0095 / 0.059 ≈ 0.161 = 16.1%"
+                correctAnswer: "16.1%. Using Bayes' theorem: P(Disease|Positive) ≈ 0.161 = 16.1%"
             },
             {
                 id: 'python_gotcha',
                 category: 'Programming_Edge_Cases',
                 question: "What's the output of this Python code?\nclass Counter:\n    def increment(self, step=[]):\n        step.append(1)\n        return len(step)",
-                correctAnswer: "Output: 1, 2, 3. The mutable default argument [] is shared between all instances.",
-                myResponse: "This demonstrates the mutable default argument trap in Python. The default [] is created once and shared between all method calls. First call: step becomes [1], returns 1. Second call: step becomes [1,1], returns 2. Third call: step becomes [1,1,1], returns 3. Output: 1, 2, 3"
+                correctAnswer: "Output: 1, 2, 3. The mutable default argument [] is shared between all instances."
             },
             {
                 id: 'logical_fallacy',
                 category: 'Logic_Reasoning',
                 question: "What's wrong with: 'All successful programmers work long hours. Sarah works long hours. Therefore, Sarah is a successful programmer.'?",
-                correctAnswer: "This is the logical fallacy of 'affirming the consequent.' Invalid reasoning structure.",
-                myResponse: "This commits the logical fallacy of 'affirming the consequent.' The argument structure is: If P then Q, Q is true, therefore P is true. This is invalid reasoning. The premise only establishes that success implies long hours, not that long hours imply success. Many people work long hours without being successful programmers."
+                correctAnswer: "This is the logical fallacy of 'affirming the consequent.' Invalid reasoning structure."
             },
             {
                 id: 'integer_overflow',
                 category: 'Programming_Edge_Cases',
                 question: "What happens with this C code?\nint x = 2147483647;\nx = x + 1;\nprintf(\"%d\", x);",
-                correctAnswer: "Integer overflow occurs. Typically wraps to -2147483648 on two's complement systems.",
-                myResponse: "This causes integer overflow. 2147483647 is the maximum value for a 32-bit signed integer (2^31 - 1). Adding 1 exceeds this limit. In C, this is technically undefined behavior, but on most modern systems using two's complement representation, it wraps around to the minimum value: -2147483648."
+                correctAnswer: "Integer overflow occurs. Typically wraps to -2147483648 on two's complement systems."
             }
         ];
     }
 
-    evaluateResponse(myResponse, correctAnswer) {
-        const myWords = myResponse.toLowerCase().split(/\s+/);
+    async generateRealAIResponse(question) {
+        try {
+            await this.logger.debug(`🤖 Sending cognitive test question to Claude: ${question.id}`);
+            
+            const response = await this.anthropic.messages.create({
+                model: "claude-3-sonnet-20240229",
+                max_tokens: 1000,
+                messages: [{
+                    role: "user",
+                    content: `You are taking a cognitive test. Please provide a concise, accurate answer to this question:
+
+${question.question}
+
+Provide a direct, technical response focusing on the core solution or answer. Think through the problem step by step if needed.`
+                }]
+            });
+
+            const aiResponse = response.content[0].text;
+            await this.logger.debug(`✅ Received Claude response: ${aiResponse.length} characters`);
+            return aiResponse;
+            
+        } catch (error) {
+            await this.logger.error('Failed to get AI response', { 
+                error: error.message, 
+                questionId: question.id,
+                stack: error.stack 
+            });
+            
+            // Return error indicator instead of crashing
+            return `[API Error: ${error.message}]`;
+        }
+    }
+
+    evaluateResponse(aiResponse, correctAnswer) {
+        const aiWords = aiResponse.toLowerCase().split(/\s+/);
         const correctWords = correctAnswer.toLowerCase().split(/\s+/);
         
         const keyCorrectWords = correctWords.filter(word => word.length > 3);
-        const keyMyWords = myWords.filter(word => word.length > 3);
+        const keyAiWords = aiWords.filter(word => word.length > 3);
         
         let matches = 0;
         for (const correctWord of keyCorrectWords) {
-            if (keyMyWords.some(myWord => 
-                myWord.includes(correctWord) || 
-                correctWord.includes(myWord) ||
-                this.areRelated(myWord, correctWord)
+            if (keyAiWords.some(aiWord => 
+                aiWord.includes(correctWord) || 
+                correctWord.includes(aiWord) ||
+                this.areRelated(aiWord, correctWord)
             )) {
                 matches++;
             }
@@ -150,18 +186,19 @@ class AutomatedAITester {
     }
 
     async runAutomatedTest() {
-        await this.logger.logTestStart('Automated AI Cognitive Testing System v2', this.getTestQuestions().length);
-        await this.logger.info('🤖 AUTOMATED AI COGNITIVE TESTING START (v2)');
-        await this.logger.info('Test Configuration v2', {
-            testType: 'Advanced Cognitive Assessment',
+        await this.logger.logTestStart('Automated AI Cognitive Testing System v3 (Real API)', this.getTestQuestions().length);
+        await this.logger.info('🤖 AUTOMATED AI COGNITIVE TESTING START (v3 - Real API)');
+        await this.logger.info('Test Configuration v3', {
+            testType: 'Real-Time Cognitive Assessment',
             categories: ['Logic_Reasoning', 'Statistical_Reasoning', 'Programming_Edge_Cases'],
             maxScorePerQuestion: 10,
-            version: '2.0'
+            version: '3.0 - Live API',
+            apiModel: 'claude-3-sonnet-20240229'
         });
 
-        console.log(chalk.blue('\n🤖 AUTOMATED AI COGNITIVE TESTING SYSTEM'));
-        console.log(chalk.blue('=========================================='));
-        console.log(chalk.white('Running comprehensive automated self-assessment...'));
+        console.log(chalk.blue('\n🤖 AUTOMATED AI COGNITIVE TESTING SYSTEM (Live API)'));
+        console.log(chalk.blue('===================================================='));
+        console.log(chalk.white('Running real-time cognitive assessment with live AI responses...'));
         console.log(chalk.gray('Testing logical reasoning, statistical understanding, and edge cases\n'));
 
         const testQuestions = this.getTestQuestions();
@@ -171,129 +208,87 @@ class AutomatedAITester {
         for (let i = 0; i < testQuestions.length; i++) {
             const test = testQuestions[i];
             
-            await this.logger.test(`🧠 Processing Advanced Cognitive Test ${i+1}/${testQuestions.length}: ${test.category}`, {
+            await this.logger.test(`🧠 Processing Real-Time Cognitive Test ${i+1}/${testQuestions.length}: ${test.category}`, {
                 testId: test.id,
                 category: test.category,
                 questionPreview: test.question.substring(0, 100) + '...',
-                version: '2.0'
+                version: '3.0 - Live API'
             });
             
             console.log(chalk.cyan(`[${i+1}/${testQuestions.length}] Testing: ${test.category}`));
             console.log(chalk.yellow('Question:'), test.question.substring(0, 80) + '...');
             
-            // Simulate processing time
-            await this.logger.debug('⏱️ Simulating advanced cognitive processing time: 1500ms');
-            await this.sleep(1500);
+            // Generate real AI response
+            const startTime = Date.now();
+            const aiResponse = await this.generateRealAIResponse(test);
+            const responseTime = Date.now() - startTime;
             
-            const evaluation = this.evaluateResponse(test.myResponse, test.correctAnswer);
+            await this.logger.debug(`⏱️ AI response time: ${responseTime}ms`);
+            
+            const evaluation = this.evaluateResponse(aiResponse, test.correctAnswer);
             totalScore += evaluation.score;
             
-            await this.logger.logPerformanceMetric(`AdvancedCognitiveTest_${i+1}_Score`, evaluation.score, '/10', `${test.category} - ${evaluation.reasoning}`);
-            await this.logger.logPerformanceMetric(`AdvancedCognitiveTest_${i+1}_Accuracy`, evaluation.accuracy, '%', `${test.category} v2.0`);
+            await this.logger.logPerformanceMetric(`RealTimeCognitiveTest_${i+1}_Score`, evaluation.score, '/10', `${test.category} - ${evaluation.reasoning}`);
+            await this.logger.logPerformanceMetric(`RealTimeCognitiveTest_${i+1}_Accuracy`, evaluation.accuracy, '%', `${test.category} v3.0 Live API`);
+            await this.logger.logPerformanceMetric(`RealTimeCognitiveTest_${i+1}_ResponseTime`, responseTime, 'ms', `API Response Time`);
             
             console.log(chalk.white(`Score: ${evaluation.score}/10 - ${evaluation.reasoning}`));
+            console.log(chalk.gray(`Response time: ${responseTime}ms`));
             
             const result = {
                 timestamp: new Date().toISOString(),
                 testId: test.id,
                 category: test.category,
                 question: test.question.substring(0, 150),
-                myResponse: test.myResponse.substring(0, 200),
+                myResponse: aiResponse.substring(0, 200), // Truncate for CSV
                 correctAnswer: test.correctAnswer.substring(0, 150),
                 score: evaluation.score,
                 reasoning: evaluation.reasoning
             };
             
             results.push(result);
-            await this.logger.success(`✅ Advanced Cognitive Test ${i+1} completed | Score: ${evaluation.score}/10 | Accuracy: ${evaluation.accuracy}%`);
         }
-        
-        const finalScore = (totalScore / (testQuestions.length * 10)) * 100;
-        
-        await this.logger.logPerformanceMetric('Advanced_Cognitive_Final_Score_Percentage', finalScore, '%', 'Overall advanced cognitive test performance');
-        await this.logger.logPerformanceMetric('Advanced_Cognitive_Final_Score_Points', totalScore, `/${testQuestions.length * 10}`, 'Total advanced cognitive points achieved');
-        
-        console.log(chalk.green('\n📊 AUTOMATED TEST RESULTS'));
-        console.log(chalk.green('==========================='));
-        console.log(chalk.yellow(`🏆 Overall Performance: ${finalScore.toFixed(1)}%`));
-        console.log(chalk.white(`Total Score: ${totalScore}/${testQuestions.length * 10}`));
-        
-        // Category breakdown
-        const categoryStats = {};
-        results.forEach(r => {
-            if (!categoryStats[r.category]) {
-                categoryStats[r.category] = { total: 0, count: 0 };
-            }
-            categoryStats[r.category].total += r.score;
-            categoryStats[r.category].count++;
-        });
-        
-        console.log(chalk.blue('\n📋 Performance by Category:'));
-        const categoryResults = {};
-        Object.entries(categoryStats).forEach(([category, stats]) => {
-            const avg = (stats.total / stats.count).toFixed(1);
-            categoryResults[category] = { average: avg, total: stats.total, count: stats.count };
-            console.log(chalk.white(`  ${category.replace('_', ' ')}: ${avg}/10`));
-            
-            // Log individual category performance
-            this.logger.logPerformanceMetric(`Advanced_Cognitive_Category_${category}`, avg, '/10', `Average score for ${category} v2.0`);
-        });
-        
-        // Log results to CSV
-        try {
-            await this.logger.logProcessStep('Save Advanced Cognitive Test Results to CSV', 'STARTED');
-            await this.csvWriter.writeRecords(results);
-            await this.logger.logFileOperation('WRITE', this.testResultsPath, true, {
-                recordCount: results.length,
-                finalScore: finalScore,
-                testType: 'advanced_cognitive_assessment',
-                version: '2.0'
-            });
-            await this.logger.logProcessStep('Save Advanced Cognitive Test Results to CSV', 'COMPLETED');
-            console.log(chalk.green('\n✅ Results logged to automated_ai_test_results.csv'));
-        } catch (error) {
-            await this.logger.logProcessStep('Save Advanced Cognitive Test Results to CSV', 'FAILED', { error: error.message });
-            await this.logger.error('Error logging advanced cognitive test results', { error: error.message, stack: error.stack });
-            console.log(chalk.red('\n❌ Error logging results:', error.message));
-        }
-        
+
+        const finalPercentage = (totalScore / (testQuestions.length * 10)) * 100;
+        const maxScore = testQuestions.length * 10;
+
+        console.log(chalk.blue('\n📊 COGNITIVE TEST RESULTS (Live AI):'));
+        console.log(chalk.white(`Total Score: ${totalScore}/${maxScore} (${finalPercentage.toFixed(1)}%)`));
+
         // Performance assessment
-        let advancedCognitiveGrade, advancedCognitiveMessage;
-        console.log(chalk.blue('\n🔍 COGNITIVE ASSESSMENT:'));
-        if (finalScore >= 90) {
-            advancedCognitiveGrade = 'EXCELLENT';
-            advancedCognitiveMessage = 'Strong reasoning across all domains';
-            console.log(chalk.green('🌟 Excellent cognitive performance - Strong reasoning across all domains'));
-        } else if (finalScore >= 80) {
-            advancedCognitiveGrade = 'VERY_GOOD';
-            advancedCognitiveMessage = 'Minor areas for improvement';
-            console.log(chalk.cyan('✨ Very good performance - Minor areas for improvement'));
-        } else if (finalScore >= 70) {
-            advancedCognitiveGrade = 'GOOD';
-            advancedCognitiveMessage = 'Some reasoning gaps detected';
-            console.log(chalk.yellow('⚡ Good baseline - Some reasoning gaps detected'));
+        let grade;
+        if (finalPercentage >= 90) {
+            grade = 'EXCELLENT';
+            console.log(chalk.green('🌟 EXCELLENT - Outstanding cognitive performance'));
+        } else if (finalPercentage >= 80) {
+            grade = 'VERY_GOOD';
+            console.log(chalk.cyan('⭐ VERY GOOD - Strong cognitive abilities'));
+        } else if (finalPercentage >= 70) {
+            grade = 'GOOD';
+            console.log(chalk.yellow('✨ GOOD - Solid cognitive baseline'));
         } else {
-            advancedCognitiveGrade = 'NEEDS_IMPROVEMENT';
-            advancedCognitiveMessage = 'Recommend focused training';
-            console.log(chalk.red('⚠️  Significant cognitive gaps - Recommend focused training'));
+            grade = 'NEEDS_IMPROVEMENT';
+            console.log(chalk.red('⚠️  NEEDS IMPROVEMENT - Cognitive gaps identified'));
         }
-        
-        await this.logger.success(`🧠 Advanced Cognitive Assessment Grade: ${advancedCognitiveGrade} - ${advancedCognitiveMessage}`);
-        
-        // Log test completion
-        await this.logger.logTestEnd('Automated AI Cognitive Testing System v2', {
-            finalPercentage: finalScore,
+
+        // Save results
+        try {
+            await this.csvWriter.writeRecords(results);
+            await this.logger.success(`💾 Real-time test results saved to ${this.testResultsPath}`);
+            console.log(chalk.green(`\n✅ Results saved to ${this.testResultsPath}`));
+        } catch (error) {
+            await this.logger.error('Failed to save results', { error: error.message });
+        }
+
+        await this.logger.logTestEnd('Real-Time Automated AI Cognitive Test', {
+            finalPercentage,
             totalScore,
-            advancedCognitiveGrade,
+            grade,
             totalQuestions: results.length,
-            categoryBreakdown: categoryResults,
-            version: '2.0'
+            version: '3.0 - Live API'
         });
-        
-        // Create a snapshot of this test run
-        await this.logger.createLogSnapshot(`advanced-cognitive-test-${Date.now()}`);
-        
-        console.log(chalk.gray('\nTest completed automatically with zero user input required! 🎯'));
+
+        return { finalPercentage, totalScore, results };
     }
 }
 
