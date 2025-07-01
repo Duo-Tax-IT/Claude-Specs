@@ -232,9 +232,21 @@ class AIPerformanceMonitor {
         const shuffledQuestions = [...this.benchmarkQuestions].sort(() => Math.random() - 0.5);
         await this.logger.process('Questions shuffled to prevent memorization', { totalQuestions: shuffledQuestions.length });
 
+        console.log(chalk.cyan('🚀 Making single batched API call for all 20 questions...'));
+        
+        // Make a single batched API call for all questions
+        const startTime = Date.now();
+        const batchedResponses = await this.generateBatchedAIResponse(shuffledQuestions);
+        const endTime = Date.now();
+        const totalResponseTime = endTime - startTime;
+        
+        console.log(chalk.green(`✅ Received all responses in ${totalResponseTime}ms (avg: ${Math.round(totalResponseTime/20)}ms per question)`));
+        console.log(chalk.blue('\n📊 Processing individual responses...\n'));
+
         for (let i = 0; i < shuffledQuestions.length; i++) {
             const question = shuffledQuestions[i];
-            const startTime = Date.now();
+            const aiResponse = batchedResponses[i] || '[Error: No response received]';
+            const avgResponseTime = Math.round(totalResponseTime / shuffledQuestions.length);
             
             await this.logger.test(`📝 Processing Question ${i+1}/20: ${question.category}`, {
                 questionId: question.id,
@@ -244,26 +256,21 @@ class AIPerformanceMonitor {
             
             console.log(chalk.cyan(`\n[${i+1}/20] ${question.category.replace('_', ' ')} Category`));
             console.log(chalk.yellow('Question:'), question.question);
-            console.log(chalk.gray('\n🤖 Sending to Claude API...'));
+            console.log(chalk.gray('AI Response:'), aiResponse.substring(0, 150) + '...');
             
-            // Make real API call to Claude
-            const aiResponse = await this.generateRealAIResponse(question);
-            
-            const endTime = Date.now();
-            const responseTime = endTime - startTime;
-            await this.logger.process('🤖 Generated AI response', {
+            await this.logger.process('🤖 Processing batched AI response', {
                 questionId: question.id,
                 responseLength: aiResponse.length,
-                responseTime: responseTime
+                avgResponseTime: avgResponseTime
             });
             
-            // Evaluate response
-            const evaluation = this.evaluateResponse(aiResponse, question.correctAnswer, responseTime);
+            // Evaluate response (using average response time for time scoring)
+            const evaluation = this.evaluateResponse(aiResponse, question.correctAnswer, avgResponseTime);
             const totalPoints = evaluation.accuracyScore + evaluation.timeScore;
             totalScore += totalPoints;
             
             await this.logger.logPerformanceMetric(`Question_${i+1}_Score`, totalPoints, '/12', `${question.category} - ${evaluation.accuracyScore} accuracy + ${evaluation.timeScore} speed`);
-            await this.logger.logPerformanceMetric(`Question_${i+1}_ResponseTime`, responseTime, 'ms', question.category);
+            await this.logger.logPerformanceMetric(`Question_${i+1}_ResponseTime`, avgResponseTime, 'ms', question.category);
             
             // Track category scores
             if (!categoryScores[question.category]) {
@@ -273,7 +280,7 @@ class AIPerformanceMonitor {
             categoryScores[question.category].total += 12;
             categoryScores[question.category].count++;
             
-            console.log(chalk.white(`Response Time: ${responseTime}ms`));
+            console.log(chalk.white(`Avg Response Time: ${avgResponseTime}ms`));
             console.log(chalk.green(`Score: ${totalPoints}/12 (${evaluation.accuracyScore} accuracy + ${evaluation.timeScore} speed)`));
             
             const result = {
@@ -286,11 +293,11 @@ class AIPerformanceMonitor {
                 accuracyScore: evaluation.accuracyScore,
                 timeScore: evaluation.timeScore,
                 totalScore: totalPoints,
-                responseTimeMs: responseTime
+                responseTimeMs: avgResponseTime
             };
             
             results.push(result);
-            await this.logger.success(`✅ Question ${i+1} completed | Score: ${totalPoints}/12 | Time: ${responseTime}ms`);
+            await this.logger.success(`✅ Question ${i+1} completed | Score: ${totalPoints}/12 | Avg Time: ${avgResponseTime}ms`);
         }
 
         // Calculate final performance
@@ -405,6 +412,125 @@ Provide a direct, technical response without unnecessary explanation. Focus on t
             // Return error indicator instead of crashing
             return `[API Error: ${error.message}]`;
         }
+    }
+
+    async generateBatchedAIResponse(questions) {
+        try {
+            await this.logger.debug(`🚀 Sending batched request with ${questions.length} questions to Claude`);
+            
+            // Build the batched prompt with all questions
+            let batchedPrompt = `You are a technical expert being tested on programming knowledge. Answer ALL 20 questions below concisely and accurately.
+
+Format your response as follows:
+Q1: [your answer to question 1]
+Q2: [your answer to question 2]
+...
+Q20: [your answer to question 20]
+
+Questions:
+`;
+
+            questions.forEach((question, index) => {
+                batchedPrompt += `\nQ${index + 1}: ${question.question}\n`;
+            });
+
+            batchedPrompt += `\nRemember: Provide direct, technical responses without unnecessary explanation. Focus on core solutions or answers. Use the exact format Q1:, Q2:, etc.`;
+
+            const response = await this.anthropic.messages.create({
+                model: "claude-3-sonnet-20240229",
+                max_tokens: 4000, // Higher limit for all 20 answers
+                messages: [{
+                    role: "user",
+                    content: batchedPrompt
+                }]
+            });
+
+            const fullResponse = response.content[0].text;
+            
+            // Parse the batched response into individual answers
+            const answers = await this.parseBatchedResponse(fullResponse, questions.length);
+            
+            await this.logger.debug(`✅ Received batched Claude response: ${fullResponse.length} characters, parsed into ${answers.length} answers`);
+            return answers;
+            
+        } catch (error) {
+            await this.logger.error('Failed to get batched AI response', { 
+                error: error.message,
+                questionCount: questions.length,
+                stack: error.stack 
+            });
+            
+            // Return array of error indicators
+            return questions.map((_, index) => `[API Error for Q${index + 1}: ${error.message}]`);
+        }
+    }
+
+    async parseBatchedResponse(fullResponse, expectedCount) {
+        try {
+            const answers = [];
+            
+            // Split by Q1:, Q2:, etc. pattern
+            const lines = fullResponse.split(/\n/);
+            let currentAnswer = '';
+            let questionNumber = 0;
+            
+            for (const line of lines) {
+                const match = line.match(/^Q(\d+):\s*(.*)$/);
+                if (match) {
+                    // Save previous answer if we have one
+                    if (questionNumber > 0) {
+                        answers.push(currentAnswer.trim());
+                    }
+                    
+                    questionNumber = parseInt(match[1]);
+                    currentAnswer = match[2];
+                } else if (questionNumber > 0) {
+                    // Continue building the current answer
+                    currentAnswer += ' ' + line;
+                }
+            }
+            
+            // Add the last answer
+            if (questionNumber > 0) {
+                answers.push(currentAnswer.trim());
+            }
+            
+            // If parsing didn't work well, try a different approach
+            if (answers.length < expectedCount) {
+                await this.logger.warning(`Parsing produced only ${answers.length}/${expectedCount} answers, attempting fallback parsing`);
+                return await this.fallbackParseBatchedResponse(fullResponse, expectedCount);
+            }
+            
+            // Ensure we have exactly the expected number of answers
+            while (answers.length < expectedCount) {
+                answers.push('[Parse Error: Answer not found in response]');
+            }
+            
+            return answers.slice(0, expectedCount); // Trim to exact count
+            
+        } catch (error) {
+            await this.logger.error('Failed to parse batched response', { error: error.message });
+            // Return fallback parsing
+            return await this.fallbackParseBatchedResponse(fullResponse, expectedCount);
+        }
+    }
+
+    async fallbackParseBatchedResponse(fullResponse, expectedCount) {
+        // Simple fallback: split by likely delimiters and take first N parts
+        const parts = fullResponse.split(/(?:\n\n|\n(?=Q\d+:))/);
+        const answers = [];
+        
+        for (let i = 0; i < expectedCount; i++) {
+            if (i < parts.length) {
+                // Clean up the part (remove Q1:, Q2: etc. prefix)
+                const cleaned = parts[i].replace(/^Q\d+:\s*/, '').trim();
+                answers.push(cleaned || '[Parse Error: Empty response]');
+            } else {
+                answers.push('[Parse Error: Insufficient responses]');
+            }
+        }
+        
+        return answers;
     }
 
     evaluateResponse(aiResponse, correctAnswer, responseTime) {
